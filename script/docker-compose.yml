@@ -1,0 +1,18 @@
+version: "3.9"
+
+# when running test local, you can specify the image version using the
+# <service>_VERSION.
+# Example, to run consul with the version 1.8:
+# CONSUL_VERSION=1.8 make
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:${ETCD_VERSION:-v3.3.8}
+    container_name: etcd
+    command: etcd --listen-client-urls 'http://0.0.0.0:4001' --advertise-client-urls 'http://127.0.0.1:4001'
+    healthcheck:
+      test: etcdctl --endpoints http://127.0.0.1:4001 cluster-health
+    ports:
+      - 4001:4001
+    volumes:
+      - /usr/share/ca-certificates/:/etc/ssl/certs

@@ -15,88 +15,64 @@ import (
 	"go.etcd.io/etcd/client/v3/concurrency"
 )
 
+// StoreName the name of the store.
+const StoreName = "etcdv3"
+
 const (
 	defaultLockTTL     = 20 * time.Second
 	etcdDefaultTimeout = 5 * time.Second
 	lockSuffix         = "___lock"
 )
 
-// Register registers etcd to valkeyrie.
-func Register() {
-	valkeyrie.AddStore(store.ETCDV3, New)
+// registers etcd v3 to Valkeyrie.
+func init() {
+	valkeyrie.Register(StoreName, newStore)
 }
 
-// EtcdV3 is the receiver type for the Store interface.
-type EtcdV3 struct {
+// Config the etcd v3 configuration.
+type Config struct {
+	TLS               *tls.Config
+	ConnectionTimeout time.Duration
+	SyncPeriod        time.Duration
+	Username          string
+	Password          string
+}
+
+func newStore(ctx context.Context, endpoints []string, options valkeyrie.Config) (store.Store, error) {
+	cfg, ok := options.(*Config)
+	if !ok && cfg != nil {
+		return nil, &store.InvalidConfigurationError{Store: StoreName, Config: options}
+	}
+
+	return New(ctx, endpoints, cfg)
+}
+
+// Store implements the store.Store interface.
+type Store struct {
 	client *etcd.Client
 }
 
-// New creates a new Etcd client given a list of endpoints and an optional tls config.
-func New(_ context.Context, addrs []string, options *store.Config) (store.Store, error) {
-	cfg := &etcd.Config{
-		Endpoints: store.CreateEndpoints(addrs, "http"),
-	}
-
-	// Set options.
-	if options != nil {
-		if options.TLS != nil {
-			setTLS(cfg, options.TLS, addrs)
-		}
-		if options.ConnectionTimeout != 0 {
-			setTimeout(cfg, options.ConnectionTimeout)
-		}
-		if options.Username != "" {
-			setCredentials(cfg, options.Username, options.Password)
-		}
-		if options.SyncPeriod != 0 {
-			cfg.AutoSyncInterval = options.SyncPeriod
-		}
-	}
-
-	s := &EtcdV3{}
-
-	var err error
-	s.client, err = etcd.New(*cfg)
+// New creates a new etcd v3 client.
+func New(_ context.Context, addrs []string, options *Config) (*Store, error) {
+	client, err := etcd.New(createConfig(addrs, options))
 	if err != nil {
 		return nil, err
 	}
 
-	return s, nil
-}
-
-// setTLS sets the tls configuration given a tls.Config scheme.
-func setTLS(cfg *etcd.Config, tlsCfg *tls.Config, addrs []string) {
-	cfg.Endpoints = store.CreateEndpoints(addrs, "https")
-	cfg.TLS = tlsCfg
-}
-
-// setTimeout sets the timeout used for connecting to the store.
-func setTimeout(cfg *etcd.Config, timeout time.Duration) {
-	cfg.DialTimeout = timeout
-}
-
-// setCredentials sets the username/password credentials for connecting to Etcd.
-func setCredentials(cfg *etcd.Config, username, password string) {
-	cfg.Username = username
-	cfg.Password = password
-}
-
-// normalize the key for usage in Etcd.
-func (s *EtcdV3) normalize(key string) string {
-	return strings.TrimPrefix(store.Normalize(key), "/")
+	return &Store{client: client}, nil
 }
 
 // Get the value at "key".
 // Returns the last modified index to use in conjunction to Atomic calls.
-func (s *EtcdV3) Get(ctx context.Context, key string, opts *store.ReadOptions) (pair *store.KVPair, err error) {
+func (s *Store) Get(ctx context.Context, key string, opts *store.ReadOptions) (pair *store.KVPair, err error) {
 	ctx, cancel := context.WithTimeout(ctx, etcdDefaultTimeout)
 	defer cancel()
 
 	var result *etcd.GetResponse
 	if opts != nil && !opts.Consistent {
-		result, err = s.client.KV.Get(ctx, s.normalize(key), etcd.WithSerializable())
+		result, err = s.client.KV.Get(ctx, normalize(key), etcd.WithSerializable())
 	} else {
-		result, err = s.client.KV.Get(ctx, s.normalize(key))
+		result, err = s.client.KV.Get(ctx, normalize(key))
 	}
 
 	if err != nil {
@@ -121,7 +97,7 @@ func (s *EtcdV3) Get(ctx context.Context, key string, opts *store.ReadOptions) (
 }
 
 // Put a value at "key".
-func (s *EtcdV3) Put(ctx context.Context, key string, value []byte, opts *store.WriteOptions) error {
+func (s *Store) Put(ctx context.Context, key string, value []byte, opts *store.WriteOptions) error {
 	ctxTxn, cancel := context.WithTimeout(ctx, etcdDefaultTimeout)
 	defer cancel()
 
@@ -144,9 +120,9 @@ func (s *EtcdV3) Put(ctx context.Context, key string, value []byte, opts *store.
 	}
 
 	if opts.KeepAlive {
-		ch, err := lease.KeepAlive(ctx, grant.ID)
-		if err != nil {
-			return err
+		ch, errKA := lease.KeepAlive(ctx, grant.ID)
+		if errKA != nil {
+			return errKA
 		}
 
 		// We do not care the element in the keepalive channel
@@ -169,8 +145,8 @@ func (s *EtcdV3) Put(ctx context.Context, key string, value []byte, opts *store.
 }
 
 // Delete a value at "key".
-func (s *EtcdV3) Delete(ctx context.Context, key string) error {
-	resp, err := s.client.KV.Delete(ctx, s.normalize(key))
+func (s *Store) Delete(ctx context.Context, key string) error {
+	resp, err := s.client.KV.Delete(ctx, normalize(key))
 	if resp != nil && resp.Deleted == 0 {
 		return store.ErrKeyNotFound
 	}
@@ -178,7 +154,7 @@ func (s *EtcdV3) Delete(ctx context.Context, key string) error {
 }
 
 // Exists checks if the key exists inside the store.
-func (s *EtcdV3) Exists(ctx context.Context, key string, opts *store.ReadOptions) (bool, error) {
+func (s *Store) Exists(ctx context.Context, key string, opts *store.ReadOptions) (bool, error) {
 	_, err := s.Get(ctx, key, opts)
 	if err != nil {
 		if errors.Is(err, store.ErrKeyNotFound) {
@@ -193,7 +169,7 @@ func (s *EtcdV3) Exists(ctx context.Context, key string, opts *store.ReadOptions
 // It returns a channel that will receive changes or pass on errors.
 // Upon creation, the current value will first be sent to the channel.
 // Providing a non-nil stopCh can be used to stop watching.
-func (s *EtcdV3) Watch(ctx context.Context, key string, opts *store.ReadOptions) (<-chan *store.KVPair, error) {
+func (s *Store) Watch(ctx context.Context, key string, opts *store.ReadOptions) (<-chan *store.KVPair, error) {
 	wc := etcd.NewWatcher(s.client)
 
 	// respCh is sending back events to the caller.
@@ -214,7 +190,7 @@ func (s *EtcdV3) Watch(ctx context.Context, key string, opts *store.ReadOptions)
 		// Push the current value through the channel.
 		respCh <- pair
 
-		watchCh := wc.Watch(ctx, s.normalize(key))
+		watchCh := wc.Watch(ctx, normalize(key))
 
 		for resp := range watchCh {
 			// Check if the watch was stopped by the caller.
@@ -241,7 +217,7 @@ func (s *EtcdV3) Watch(ctx context.Context, key string, opts *store.ReadOptions)
 // It returns a channel that will receive changes or pass on errors.
 // Upon creating a watch, the current children values will be sent to the channel.
 // Providing a non-nil stopCh can be used to stop watching.
-func (s *EtcdV3) WatchTree(ctx context.Context, directory string, opts *store.ReadOptions) (<-chan []*store.KVPair, error) {
+func (s *Store) WatchTree(ctx context.Context, directory string, opts *store.ReadOptions) (<-chan []*store.KVPair, error) {
 	wc := etcd.NewWatcher(s.client)
 
 	// respCh is sending back events to the caller.
@@ -263,7 +239,7 @@ func (s *EtcdV3) WatchTree(ctx context.Context, directory string, opts *store.Re
 		respCh <- pairs
 
 		rev++
-		watchCh := wc.Watch(ctx, s.normalize(directory), etcd.WithPrefix(), etcd.WithRev(rev))
+		watchCh := wc.Watch(ctx, normalize(directory), etcd.WithPrefix(), etcd.WithRev(rev))
 
 		for resp := range watchCh {
 			// Check if the watch was stopped by the caller.
@@ -292,7 +268,7 @@ func (s *EtcdV3) WatchTree(ctx context.Context, directory string, opts *store.Re
 
 // AtomicPut puts a value at "key" if the key has not been modified in the meantime,
 // throws an error if this is the case.
-func (s *EtcdV3) AtomicPut(ctx context.Context, key string, value []byte, previous *store.KVPair, opts *store.WriteOptions) (bool, *store.KVPair, error) {
+func (s *Store) AtomicPut(ctx context.Context, key string, value []byte, previous *store.KVPair, opts *store.WriteOptions) (bool, *store.KVPair, error) {
 	var cmp etcd.Cmp
 	var testIndex bool
 
@@ -346,7 +322,7 @@ func (s *EtcdV3) AtomicPut(ctx context.Context, key string, value []byte, previo
 
 // AtomicDelete deletes a value at "key" if the key has not been modified in the meantime,
 // throws an error if this is the case.
-func (s *EtcdV3) AtomicDelete(ctx context.Context, key string, previous *store.KVPair) (bool, error) {
+func (s *Store) AtomicDelete(ctx context.Context, key string, previous *store.KVPair) (bool, error) {
 	if previous == nil {
 		return false, store.ErrPreviousNotSpecified
 	}
@@ -377,17 +353,17 @@ func (s *EtcdV3) AtomicDelete(ctx context.Context, key string, previous *store.K
 }
 
 // List child nodes of a given directory.
-func (s *EtcdV3) List(ctx context.Context, directory string, opts *store.ReadOptions) ([]*store.KVPair, error) {
+func (s *Store) List(ctx context.Context, directory string, opts *store.ReadOptions) ([]*store.KVPair, error) {
 	_, kv, err := s.list(ctx, directory, opts)
 	return kv, err
 }
 
 // DeleteTree deletes a range of keys under a given directory.
-func (s *EtcdV3) DeleteTree(ctx context.Context, directory string) error {
+func (s *Store) DeleteTree(ctx context.Context, directory string) error {
 	ctx, cancel := context.WithTimeout(ctx, etcdDefaultTimeout)
 	defer cancel()
 
-	resp, err := s.client.KV.Delete(ctx, s.normalize(directory), etcd.WithPrefix())
+	resp, err := s.client.KV.Delete(ctx, normalize(directory), etcd.WithPrefix())
 	if err != nil {
 		return err
 	}
@@ -398,7 +374,7 @@ func (s *EtcdV3) DeleteTree(ctx context.Context, directory string) error {
 }
 
 // NewLock returns a handle to a lock struct which can be used to provide mutual exclusion on a key.
-func (s *EtcdV3) NewLock(ctx context.Context, key string, opts *store.LockOptions) (lock store.Locker, err error) {
+func (s *Store) NewLock(ctx context.Context, key string, opts *store.LockOptions) (lock store.Locker, err error) {
 	var value string
 	ttl := defaultLockTTL
 	renewCh := make(chan struct{})
@@ -437,8 +413,8 @@ func (s *EtcdV3) NewLock(ctx context.Context, key string, opts *store.LockOption
 	// a side key is created with a suffix (such as "_lock") and represents the mutex.
 	// Thus we have a pair composed of the key to protect with a lock: "/key",
 	// and a side key that  acts as the lock: "/key_lock".
-	mutexKey := s.normalize(key + lockSuffix)
-	writeKey := s.normalize(key)
+	mutexKey := normalize(key + lockSuffix)
+	writeKey := normalize(key)
 
 	// Create lock object.
 	lock = &etcdLock{
@@ -456,12 +432,12 @@ func (s *EtcdV3) NewLock(ctx context.Context, key string, opts *store.LockOption
 }
 
 // Close closes the client connection.
-func (s *EtcdV3) Close() error {
+func (s *Store) Close() error {
 	return s.client.Close()
 }
 
 // list child nodes of a given directory and return revision number.
-func (s *EtcdV3) list(ctx context.Context, directory string, opts *store.ReadOptions) (int64, []*store.KVPair, error) {
+func (s *Store) list(ctx context.Context, directory string, opts *store.ReadOptions) (int64, []*store.KVPair, error) {
 	ctx, cancel := context.WithTimeout(ctx, etcdDefaultTimeout)
 	defer cancel()
 
@@ -469,9 +445,9 @@ func (s *EtcdV3) list(ctx context.Context, directory string, opts *store.ReadOpt
 	var err error
 
 	if opts != nil && !opts.Consistent {
-		resp, err = s.client.KV.Get(ctx, s.normalize(directory), etcd.WithSerializable(), etcd.WithPrefix(), etcd.WithSort(etcd.SortByKey, etcd.SortDescend))
+		resp, err = s.client.KV.Get(ctx, normalize(directory), etcd.WithSerializable(), etcd.WithPrefix(), etcd.WithSort(etcd.SortByKey, etcd.SortDescend))
 	} else {
-		resp, err = s.client.KV.Get(ctx, s.normalize(directory), etcd.WithPrefix(), etcd.WithSort(etcd.SortByKey, etcd.SortDescend))
+		resp, err = s.client.KV.Get(ctx, normalize(directory), etcd.WithPrefix(), etcd.WithSort(etcd.SortByKey, etcd.SortDescend))
 	}
 
 	if err != nil {
@@ -482,8 +458,7 @@ func (s *EtcdV3) list(ctx context.Context, directory string, opts *store.ReadOpt
 		return 0, nil, store.ErrKeyNotFound
 	}
 
-	kv := []*store.KVPair{}
-
+	var kv []*store.KVPair
 	for _, n := range resp.Kvs {
 		if string(n.Key) == directory {
 			continue
@@ -506,7 +481,7 @@ func (s *EtcdV3) list(ctx context.Context, directory string, opts *store.ReadOpt
 
 type etcdLock struct {
 	lock  sync.Mutex
-	store *EtcdV3
+	store *Store
 
 	mutex   *concurrency.Mutex
 	session *concurrency.Session
@@ -555,4 +530,39 @@ func (l *etcdLock) Unlock(ctx context.Context) error {
 	}
 
 	return l.mutex.Unlock(ctx)
+}
+
+func createConfig(addrs []string, options *Config) etcd.Config {
+	cfg := etcd.Config{
+		Endpoints: store.CreateEndpoints(addrs, "http"),
+	}
+
+	if options == nil {
+		return cfg
+	}
+
+	if options.TLS != nil {
+		cfg.Endpoints = store.CreateEndpoints(addrs, "https")
+		cfg.TLS = options.TLS
+	}
+
+	if options.ConnectionTimeout != 0 {
+		cfg.DialTimeout = options.ConnectionTimeout
+	}
+
+	if options.Username != "" {
+		cfg.Username = options.Username
+		cfg.Password = options.Password
+	}
+
+	if options.SyncPeriod != 0 {
+		cfg.AutoSyncInterval = options.SyncPeriod
+	}
+
+	return cfg
+}
+
+// normalize the key for usage in Etcd.
+func normalize(key string) string {
+	return strings.TrimPrefix(key, "/")
 }

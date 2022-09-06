@@ -7,7 +7,7 @@ import (
 
 	"github.com/kvtools/valkeyrie"
 	"github.com/kvtools/valkeyrie/store"
-	"github.com/kvtools/valkeyrie/testutils"
+	"github.com/kvtools/valkeyrie/testsuite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +22,7 @@ func makeEtcdV3Client(t *testing.T) store.Store {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	config := &store.Config{
+	config := &Config{
 		ConnectionTimeout: 3 * time.Second,
 		Username:          "test",
 		Password:          "very-secure",
@@ -35,16 +35,14 @@ func makeEtcdV3Client(t *testing.T) store.Store {
 }
 
 func TestEtcdV3Register(t *testing.T) {
-	Register()
-
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	kv, err := valkeyrie.NewStore(ctx, store.ETCDV3, []string{client}, nil)
+	kv, err := valkeyrie.NewStore(ctx, StoreName, []string{client}, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, kv)
 
-	assert.IsTypef(t, kv, new(EtcdV3), "Error registering and initializing etcd with v3 client")
+	assert.IsTypef(t, kv, new(Store), "Error registering and initializing etcd with v3 client")
 }
 
 func TestEtcdV3Store(t *testing.T) {
@@ -53,16 +51,16 @@ func TestEtcdV3Store(t *testing.T) {
 	ttlKV := makeEtcdV3Client(t)
 
 	t.Cleanup(func() {
-		testutils.RunCleanup(t, kv)
+		testsuite.RunCleanup(t, kv)
 	})
 
-	testutils.RunTestCommon(t, kv)
-	testutils.RunTestAtomic(t, kv)
-	testutils.RunTestWatch(t, kv)
-	testutils.RunTestLock(t, kv)
-	testutils.RunTestLockTTL(t, kv, lockKV)
-	testutils.RunTestListLock(t, kv)
-	testutils.RunTestTTL(t, kv, ttlKV)
+	testsuite.RunTestCommon(t, kv)
+	testsuite.RunTestAtomic(t, kv)
+	testsuite.RunTestWatch(t, kv)
+	testsuite.RunTestLock(t, kv)
+	testsuite.RunTestLockTTL(t, kv, lockKV)
+	testsuite.RunTestListLock(t, kv)
+	testsuite.RunTestTTL(t, kv, ttlKV)
 }
 
 func TestEtcdV3KeepAlive(t *testing.T) {
