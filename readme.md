@@ -42,20 +42,18 @@ import (
 )
 
 func main() {
-	addr := "localhost:8500"
+	ctx := context.Background()
 
-	// Initialize a new store.
 	config := &etcdv3.Config{
         Password: "example",
 	}
 
-	kv, err := valkeyrie.NewStore(etcdv3.StoreName, []string{addr}, config)
+	kv, err := valkeyrie.NewStore(ctx, etcdv3.StoreName, []string{"localhost:8500"}, config)
 	if err != nil {
 		log.Fatal("Cannot create store")
 	}
 
 	key := "foo"
-	ctx := context.Background()
 
 	err = kv.Put(ctx, key, []byte("bar"), nil)
 	if err != nil {
@@ -67,11 +65,11 @@ func main() {
 		log.Fatalf("Error trying accessing value at key: %v", key)
 	}
 
+	log.Printf("value: %s", string(pair.Value))
+
 	err = kv.Delete(ctx, key)
 	if err != nil {
 		log.Fatalf("Error trying to delete key %v", key)
 	}
-
-	log.Printf("value: %s", string(pair.Value))
 }
 ```
