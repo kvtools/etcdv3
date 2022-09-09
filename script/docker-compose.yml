@@ -13,6 +13,6 @@ services:
     healthcheck:
       test: etcdctl --endpoints http://127.0.0.1:4001 cluster-health
     ports:
-      - 4001:4001
+      - "4001:4001"
     volumes:
       - /usr/share/ca-certificates/:/etc/ssl/certs

@@ -411,7 +411,7 @@ func (s *Store) NewLock(ctx context.Context, key string, opts *store.LockOptions
 	// A Mutex is a simple key that can only be held by a single process.
 	// An etcd mutex behaves like a Zookeeper lock:
 	// a side key is created with a suffix (such as "_lock") and represents the mutex.
-	// Thus we have a pair composed of the key to protect with a lock: "/key",
+	// Thus, we have a pair composed of the key to protect with a lock: "/key",
 	// and a side key that  acts as the lock: "/key_lock".
 	mutexKey := normalize(key + lockSuffix)
 	writeKey := normalize(key)
