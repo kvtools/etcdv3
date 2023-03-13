@@ -104,7 +104,7 @@ func (s *Store) Put(ctx context.Context, key string, value []byte, opts *store.W
 	pr := s.client.Txn(ctxTxn)
 
 	if opts == nil || opts.TTL <= 0 {
-		pr.Then(etcd.OpPut(key, string(value)))
+		pr.Then(etcd.OpPut(normalize(key), string(value)))
 
 		_, err := pr.Commit()
 		if err != nil {
@@ -134,7 +134,7 @@ func (s *Store) Put(ctx context.Context, key string, value []byte, opts *store.W
 		}()
 	}
 
-	pr.Then(etcd.OpPut(key, string(value), etcd.WithLease(grant.ID)))
+	pr.Then(etcd.OpPut(normalize(key), string(value), etcd.WithLease(grant.ID)))
 
 	_, err = pr.Commit()
 	if err != nil {
@@ -275,11 +275,11 @@ func (s *Store) AtomicPut(ctx context.Context, key string, value []byte, previou
 	if previous != nil {
 		// We compare on the last modified index.
 		testIndex = true
-		cmp = etcd.Compare(etcd.ModRevision(key), "=", int64(previous.LastIndex))
+		cmp = etcd.Compare(etcd.ModRevision(normalize(key)), "=", int64(previous.LastIndex))
 	} else {
 		// Previous key is not given, thus we want the key not to exist.
 		testIndex = false
-		cmp = etcd.Compare(etcd.CreateRevision(key), "=", 0)
+		cmp = etcd.Compare(etcd.CreateRevision(normalize(key)), "=", 0)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, etcdDefaultTimeout)
@@ -294,9 +294,9 @@ func (s *Store) AtomicPut(ctx context.Context, key string, value []byte, previou
 		if err != nil {
 			return false, nil, err
 		}
-		pr.Then(etcd.OpPut(key, string(value), etcd.WithLease(resp.ID)))
+		pr.Then(etcd.OpPut(normalize(key), string(value), etcd.WithLease(resp.ID)))
 	} else {
-		pr.Then(etcd.OpPut(key, string(value)))
+		pr.Then(etcd.OpPut(normalize(key), string(value)))
 	}
 
 	txn, err := pr.Commit()
@@ -312,7 +312,7 @@ func (s *Store) AtomicPut(ctx context.Context, key string, value []byte, previou
 	}
 
 	updated := &store.KVPair{
-		Key:       key,
+		Key:       normalize(key),
 		Value:     value,
 		LastIndex: uint64(txn.Header.Revision),
 	}
@@ -328,14 +328,14 @@ func (s *Store) AtomicDelete(ctx context.Context, key string, previous *store.KV
 	}
 
 	// We compare on the last modified index.
-	cmp := etcd.Compare(etcd.ModRevision(key), "=", int64(previous.LastIndex))
+	cmp := etcd.Compare(etcd.ModRevision(normalize(key)), "=", int64(previous.LastIndex))
 
 	ctx, cancel := context.WithTimeout(ctx, etcdDefaultTimeout)
 	defer cancel()
 
 	txn, err := s.client.Txn(ctx).
 		If(cmp).
-		Then(etcd.OpDelete(key)).
+		Then(etcd.OpDelete(normalize(key))).
 		Commit()
 	if err != nil {
 		return false, err
