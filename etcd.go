@@ -131,6 +131,21 @@ func (s *Store) Put(ctx context.Context, key string, value []byte, opts *store.W
 			for v := range ch {
 				_ = v
 			}
+
+			// try put again when the ch closed
+			for {
+				select {
+				case <-s.client.Ctx().Done():
+					return
+				default:
+					err = s.Put(context.Background(), key, value, opts)
+					if err != nil {
+						time.Sleep(time.Second)
+						continue
+					}
+					return
+				}
+			}
 		}()
 	}
 
