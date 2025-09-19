@@ -3,7 +3,7 @@ name: Build and test
 on: [push, pull_request]
 
 env:
-  GOLANGCI_LINT_VERSION: v2.0.2
+  GOLANGCI_LINT_VERSION: v2.4.0
 
 jobs:
   build:
@@ -13,8 +13,8 @@ jobs:
         go-version: [stable, oldstable]
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
 
