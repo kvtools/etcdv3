@@ -1,51 +1,15 @@
-run:
-  timeout: 5m
-  skip-files: [ ]
-  skip-dirs: [ ]
+version: "2"
 
-linters-settings:
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
-  gocyclo:
-    min-complexity: 15
-  goconst:
-    min-len: 5
-    min-occurrences: 3
-  misspell:
-    locale: US
-  funlen:
-    lines: -1
-    statements: 40
-  godox:
-    keywords:
-      - FIXME
-  gofumpt:
-    extra-rules: false
-  depguard:
-    list-type: blacklist
-    include-go-root: false
-    packages:
-      - github.com/sirupsen/logrus
-      - github.com/pkg/errors
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - unnamedResult
-      - sloppyReassign
-      - rangeValCopy
-      - octalLiteral
-      - paramTypeCombine # already handle by gofumpt.extra-rules
-    settings:
-      hugeParam:
-        sizeThreshold: 100
+formatters:
+  enable:
+    - gci
+    - gofumpt
+  settings:
+    gofumpt:
+      extra-rules: false
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - asasalint
     - asciicheck
@@ -55,14 +19,13 @@ linters:
     - depguard
     - dogsled
     - durationcheck
+    - err113
     - errcheck
     - errname
     - errorlint
-    - exportloopref
     - forbidigo
     - forcetypeassert
     - funlen
-    - gci
     - gochecknoglobals
     - gocognit
     - goconst
@@ -70,16 +33,11 @@ linters:
     - gocyclo
     - godot
     - godox
-    - goerr113
-    - gofmt
-    - gofumpt
     - goheader
-    - goimports
     - gomoddirectives
     - gomodguard
     - goprintffuncname
     - gosec
-    - gosimple
     - govet
     - importas
     - ineffassign
@@ -94,11 +52,8 @@ linters:
     - promlinter
     - revive
     - staticcheck
-    - stylecheck
     - tagliatelle
-    - tenv
     - thelper
-    - typecheck
     - unconvert
     - unparam
     - unused
@@ -106,13 +61,60 @@ linters:
     - wastedassign
     - whitespace
 
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: github.com/instana/testify
+              desc: not allowed
+            - pkg: github.com/sirupsen/logrus
+              desc: not allowed
+            - pkg: github.com/pkg/errors
+              desc: Should be replaced by standard lib errors package
+    funlen:
+      lines: -1
+      statements: 40
+    goconst:
+      min-len: 5
+      min-occurrences: 3
+    gocritic:
+      disabled-checks:
+        - unnamedResult
+        - sloppyReassign
+        - rangeValCopy
+        - octalLiteral
+        - paramTypeCombine # already handle by gofumpt.extra-rules
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      settings:
+        hugeParam:
+          sizeThreshold: 100
+    gocyclo:
+      min-complexity: 15
+    godox:
+      keywords:
+        - FIXME
+    gosec:
+      excludes:
+        - G115
+    govet:
+      disable:
+        - fieldalignment
+      enable-all: true
+    misspell:
+      locale: US
+
+  exclusions:
+    warn-unused: true
+    rules:
+      - linters:
+          - funlen
+          - goconst
+        path: (.+)_test.go
+
 issues:
-  exclude-use-default: false
-  max-per-linter: 0
+  max-issues-per-linter: 0
   max-same-issues: 0
-  exclude: [ ]
-  exclude-rules:
-    - path: "(.+)_test.go"
-      linters:
-        - goconst
-        - funlen

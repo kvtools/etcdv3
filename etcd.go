@@ -70,9 +70,9 @@ func (s *Store) Get(ctx context.Context, key string, opts *store.ReadOptions) (p
 
 	var result *etcd.GetResponse
 	if opts != nil && !opts.Consistent {
-		result, err = s.client.KV.Get(ctx, normalize(key), etcd.WithSerializable())
+		result, err = s.client.Get(ctx, normalize(key), etcd.WithSerializable())
 	} else {
-		result, err = s.client.KV.Get(ctx, normalize(key))
+		result, err = s.client.Get(ctx, normalize(key))
 	}
 
 	if err != nil {
@@ -146,7 +146,7 @@ func (s *Store) Put(ctx context.Context, key string, value []byte, opts *store.W
 
 // Delete a value at "key".
 func (s *Store) Delete(ctx context.Context, key string) error {
-	resp, err := s.client.KV.Delete(ctx, normalize(key))
+	resp, err := s.client.Delete(ctx, normalize(key))
 	if resp != nil && resp.Deleted == 0 {
 		return store.ErrKeyNotFound
 	}
@@ -363,7 +363,7 @@ func (s *Store) DeleteTree(ctx context.Context, directory string) error {
 	ctx, cancel := context.WithTimeout(ctx, etcdDefaultTimeout)
 	defer cancel()
 
-	resp, err := s.client.KV.Delete(ctx, normalize(directory), etcd.WithPrefix())
+	resp, err := s.client.Delete(ctx, normalize(directory), etcd.WithPrefix())
 	if err != nil {
 		return err
 	}
@@ -445,9 +445,9 @@ func (s *Store) list(ctx context.Context, directory string, opts *store.ReadOpti
 	var err error
 
 	if opts != nil && !opts.Consistent {
-		resp, err = s.client.KV.Get(ctx, normalize(directory), etcd.WithSerializable(), etcd.WithPrefix(), etcd.WithSort(etcd.SortByKey, etcd.SortDescend))
+		resp, err = s.client.Get(ctx, normalize(directory), etcd.WithSerializable(), etcd.WithPrefix(), etcd.WithSort(etcd.SortByKey, etcd.SortDescend))
 	} else {
-		resp, err = s.client.KV.Get(ctx, normalize(directory), etcd.WithPrefix(), etcd.WithSort(etcd.SortByKey, etcd.SortDescend))
+		resp, err = s.client.Get(ctx, normalize(directory), etcd.WithPrefix(), etcd.WithSort(etcd.SortByKey, etcd.SortDescend))
 	}
 
 	if err != nil {
