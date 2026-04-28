@@ -15,10 +15,10 @@ test:
 ## Launch docker stack for test
 .PHONY: test-start-stack
 test-start-stack:
-	docker-compose -f script/docker-compose.yml up --wait
+	docker compose -f script/docker-compose.yml up --wait
 
 ## Clean local data
 .PHONY: clean
 clean:
-	docker-compose -f script/docker-compose.yml down --remove-orphans
+	docker compose -f script/docker-compose.yml down --remove-orphans
 	$(RM) goverage.report $(shell find . -type f -name *.out)
