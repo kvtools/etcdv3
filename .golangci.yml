@@ -35,7 +35,7 @@ linters:
     - godox
     - goheader
     - gomoddirectives
-    - gomodguard
+    - gomodguard_v2
     - goprintffuncname
     - gosec
     - govet
@@ -43,10 +43,12 @@ linters:
     - ineffassign
     - makezero
     - misspell
+    - modernize
     - nakedret
     - nestif
     - nilerr
     - noctx
+    - noinlineerr
     - nolintlint
     - predeclared
     - promlinter
@@ -60,6 +62,7 @@ linters:
     - usestdlibvars
     - wastedassign
     - whitespace
+    - wsl_v5
 
   settings:
     depguard:

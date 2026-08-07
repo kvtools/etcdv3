@@ -110,10 +110,12 @@ func (s *Store) Put(ctx context.Context, key string, value []byte, opts *store.W
 		if err != nil {
 			return err
 		}
+
 		return nil
 	}
 
 	lease := etcd.NewLease(s.client)
+
 	grant, err := lease.Grant(ctx, int64(opts.TTL/time.Second))
 	if err != nil {
 		return err
@@ -150,6 +152,7 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 	if resp != nil && resp.Deleted == 0 {
 		return store.ErrKeyNotFound
 	}
+
 	return err
 }
 
@@ -160,8 +163,10 @@ func (s *Store) Exists(ctx context.Context, key string, opts *store.ReadOptions)
 		if errors.Is(err, store.ErrKeyNotFound) {
 			return false, nil
 		}
+
 		return false, err
 	}
+
 	return true, nil
 }
 
@@ -184,6 +189,7 @@ func (s *Store) Watch(ctx context.Context, key string, opts *store.ReadOptions) 
 	go func() {
 		defer func() {
 			_ = wc.Close()
+
 			close(respCh)
 		}()
 
@@ -232,6 +238,7 @@ func (s *Store) WatchTree(ctx context.Context, directory string, opts *store.Rea
 	go func() {
 		defer func() {
 			_ = wc.Close()
+
 			close(respCh)
 		}()
 
@@ -269,8 +276,10 @@ func (s *Store) WatchTree(ctx context.Context, directory string, opts *store.Rea
 // AtomicPut puts a value at "key" if the key has not been modified in the meantime,
 // throws an error if this is the case.
 func (s *Store) AtomicPut(ctx context.Context, key string, value []byte, previous *store.KVPair, opts *store.WriteOptions) (bool, *store.KVPair, error) {
-	var cmp etcd.Cmp
-	var testIndex bool
+	var (
+		cmp       etcd.Cmp
+		testIndex bool
+	)
 
 	if previous != nil {
 		// We compare on the last modified index.
@@ -290,10 +299,12 @@ func (s *Store) AtomicPut(ctx context.Context, key string, value []byte, previou
 	// We set the TTL if given.
 	if opts != nil && opts.TTL > 0 {
 		lease := etcd.NewLease(s.client)
+
 		resp, err := lease.Grant(ctx, int64(opts.TTL/time.Second))
 		if err != nil {
 			return false, nil, err
 		}
+
 		pr.Then(etcd.OpPut(normalize(key), string(value), etcd.WithLease(resp.ID)))
 	} else {
 		pr.Then(etcd.OpPut(normalize(key), string(value)))
@@ -308,6 +319,7 @@ func (s *Store) AtomicPut(ctx context.Context, key string, value []byte, previou
 		if testIndex {
 			return false, nil, store.ErrKeyModified
 		}
+
 		return false, nil, store.ErrKeyExists
 	}
 
@@ -367,18 +379,23 @@ func (s *Store) DeleteTree(ctx context.Context, directory string) error {
 	if err != nil {
 		return err
 	}
+
 	if resp.Deleted == 0 {
 		return store.ErrKeyNotFound
 	}
+
 	return nil
 }
 
 // NewLock returns a handle to a lock struct which can be used to provide mutual exclusion on a key.
 func (s *Store) NewLock(ctx context.Context, key string, opts *store.LockOptions) (lock store.Locker, err error) {
-	var value string
+	var (
+		value          string
+		deleteOnUnlock bool
+	)
+
 	ttl := defaultLockTTL
 	renewCh := make(chan struct{})
-	var deleteOnUnlock bool
 
 	// Apply options on Lock.
 	if opts != nil {
@@ -405,6 +422,7 @@ func (s *Store) NewLock(ctx context.Context, key string, opts *store.LockOptions
 
 	go func() {
 		<-renewCh
+
 		_ = session.Close()
 	}()
 
@@ -441,8 +459,10 @@ func (s *Store) list(ctx context.Context, directory string, opts *store.ReadOpti
 	ctx, cancel := context.WithTimeout(ctx, etcdDefaultTimeout)
 	defer cancel()
 
-	var resp *etcd.GetResponse
-	var err error
+	var (
+		resp *etcd.GetResponse
+		err  error
+	)
 
 	if opts != nil && !opts.Consistent {
 		resp, err = s.client.Get(ctx, normalize(directory), etcd.WithSerializable(), etcd.WithPrefix(), etcd.WithSort(etcd.SortByKey, etcd.SortDescend))
@@ -459,6 +479,7 @@ func (s *Store) list(ctx context.Context, directory string, opts *store.ReadOpti
 	}
 
 	var kv []*store.KVPair
+
 	for _, n := range resp.Kvs {
 		if string(n.Key) == directory {
 			continue
@@ -504,6 +525,7 @@ func (l *etcdLock) Lock(ctx context.Context) (<-chan struct{}, error) {
 		if errors.Is(err, context.Canceled) {
 			return nil, nil
 		}
+
 		return nil, err
 	}
 
@@ -512,6 +534,7 @@ func (l *etcdLock) Lock(ctx context.Context) (<-chan struct{}, error) {
 	} else {
 		_, err = l.store.client.Put(ctx, l.writeKey, l.value)
 	}
+
 	if err != nil {
 		return nil, err
 	}
